@@ -8,6 +8,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
@@ -30,11 +31,14 @@ public class PartidoControllerIntegrationTest {
 
         private Partido partido1;
         private Partido partido2;
+        private Partido partido3;
+
 
         @BeforeEach
         void setUp() {
                 partido1 = new Partido(1, "Partido A", "Descripción A", "futbol", 0, 55.5f);
                 partido2 = new Partido(2, "Partido B", "Descripción B", "tenis", 1, 10.0f); // Partido ya ganado
+                partido3 = new Partido(3, "Partido C", "Descripción C", "tenis", -1, 10.0f); // Partido ya perdido
 
                 partidoController.getPartidos().put(1l, partido1);
                 partidoController.getPartidos().put(2l, partido2);
@@ -100,6 +104,41 @@ public class PartidoControllerIntegrationTest {
                                 .andExpect(status().isBadRequest())
                                 .andExpect(MockMvcResultMatchers.content().string("No se puede superar 1"));
         }
+
+        @Test
+        void testPierde() throws Exception {
+                // Crear el partido
+                mockMvc.perform(MockMvcRequestBuilders.post("/partidos")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(partido1)))
+                                .andExpect(status().isCreated());
+
+                // Ganar el partido (debe decrementar el resultado)
+                mockMvc.perform(MockMvcRequestBuilders.post("/partidos/2/pierde"))
+                                .andExpect(status().isOk())
+                                .andExpect(MockMvcResultMatchers.content()
+                                                .string("Pierde: Partido B"));
+
+                // Verificar que el esta perdido
+                mockMvc.perform(MockMvcRequestBuilders.get("/partidos/2"))
+                                .andExpect(status().isOk())
+                                .andExpect(MockMvcResultMatchers.jsonPath("$.resultado").value(0));
+        }
+
+        @Test
+        void testGanaYaPerdido() throws Exception {
+                // Crear el partido sin stock
+                mockMvc.perform(MockMvcRequestBuilders.post("/partidos")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(partido2)))
+                                .andExpect(status().isCreated());
+
+                // Intentar perder el partido (debe devolver BadRequest debido a que ya está perdido
+                mockMvc.perform(MockMvcRequestBuilders.post("/partidos/3/pierde"))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(MockMvcResultMatchers.content().string("No se puede bajar de -1"));
+        }
+
 
         @Test
         void testActualizarPartida() throws Exception {
